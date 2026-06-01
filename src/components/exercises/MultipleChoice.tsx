@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ExerciseRecord, MultipleChoiceData } from "@/types/exercise";
 import AudioButton from "@/components/ui/AudioButton";
+import PhoneticGuide from "@/components/ui/PhoneticGuide";
 
 interface Props {
   exercise: ExerciseRecord;
@@ -36,6 +37,7 @@ export default function MultipleChoice({ exercise, onAnswer, disabled }: Props) 
               {data.promptAudio && <AudioButton audioUrl={data.promptAudio} />}
             </div>
             <p className="text-gray-500 text-sm">{data.instruction ?? "What does this mean?"}</p>
+            <PhoneticGuide word={data.prompt} language="Kikuyu" />
           </div>
         )}
       </div>

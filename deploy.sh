@@ -20,7 +20,7 @@ echo "Building..."
 npm run build
 
 echo "Restarting PM2..."
-pm2 restart local-dialect
+pm2 startOrReload ecosystem.config.js --update-env
 
 echo "Deploy complete! ✓"
 pm2 logs local-dialect --nostream --lines 5

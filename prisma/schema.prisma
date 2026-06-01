@@ -31,6 +31,9 @@ model User {
   lessonResults LessonResult[]
   userBadges    UserBadge[]
   xpLogs        XPLog[]
+  emailLogs     EmailLog[]
+
+  emailOptOut   Boolean   @default(false)
 
   @@map("users")
 }
@@ -90,6 +93,7 @@ model Language {
 
   units         Unit[]
   userLanguages UserLanguage[]
+  stories       Story[]
 
   @@map("languages")
 }
@@ -106,6 +110,7 @@ model Unit {
 
   language Language @relation(fields: [languageId], references: [id])
   lessons  Lesson[]
+  stories  Story[]
 
   @@map("units")
 }
@@ -131,6 +136,7 @@ enum LessonType {
   STANDARD
   REVIEW
   CHALLENGE
+  STORY
 }
 
 model Exercise {
@@ -227,4 +233,57 @@ model UserBadge {
 
   @@unique([userId, badgeId])
   @@map("user_badges")
+}
+
+// ─── EMAIL ────────────────────────────────────────────────────────────────────
+
+model EmailLog {
+  id      String   @id @default(cuid())
+  userId  String
+  type    String
+  subject String
+  sentAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, sentAt])
+  @@map("email_logs")
+}
+
+// ─── STORIES ─────────────────────────────────────────────────────────────────
+
+model Story {
+  id          String      @id @default(cuid())
+  languageId  String
+  unitId      String?
+  title       String
+  slug        String      @unique
+  description String?
+  coverEmoji  String?
+  sortOrder   Int         @default(0)
+  isPublished Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+
+  language Language    @relation(fields: [languageId], references: [id])
+  unit     Unit?       @relation(fields: [unitId], references: [id])
+  pages    StoryPage[]
+
+  @@map("stories")
+}
+
+model StoryPage {
+  id             String   @id @default(cuid())
+  storyId        String
+  pageNumber     Int
+  sourceText     String
+  translatedText String
+  audioUrl       String?
+  imageUrl       String?
+  wordMap        Json?
+  createdAt      DateTime @default(now())
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, pageNumber])
+  @@map("story_pages")
 }

@@ -26,7 +26,7 @@ export interface LessonRecord {
   description: string | null;
   sortOrder: number;
   xpReward: number;
-  type: "STANDARD" | "REVIEW" | "CHALLENGE";
+  type: "STANDARD" | "REVIEW" | "CHALLENGE" | "STORY";
 }
 
 export interface LessonWithProgress extends LessonRecord {

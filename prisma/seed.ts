@@ -2,6 +2,10 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env" });
 dotenv.config({ path: ".env.local", override: true });
 import { PrismaClient, ExerciseType } from "../src/generated/prisma/client";
+import { LUO_UNITS } from "../src/data/seed/luo";
+import { LUHYA_UNITS } from "../src/data/seed/luhya";
+import { KAMBA_UNITS } from "../src/data/seed/kamba";
+import type { SeedUnit } from "../src/data/seed/types";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
@@ -198,7 +202,49 @@ async function main() {
     }
   }
 
-  console.log(`✓ ${KIKUYU_UNITS.length} units, ${KIKUYU_UNITS.flatMap(u => u.lessons).length} lessons, ${totalExercises} exercises`);
+  console.log(`✓ Kikuyu: ${KIKUYU_UNITS.length} units, ${KIKUYU_UNITS.flatMap(u => u.lessons).length} lessons, ${totalExercises} exercises`);
+
+  // Helper to seed any language from a SeedUnit array
+  async function seedLanguage(lang: { slug: string; name: string; nativeName: string; isActive: boolean; sortOrder: number }, units: SeedUnit[]) {
+    const language = await prisma.language.upsert({
+      where: { slug: lang.slug },
+      update: { isActive: lang.isActive },
+      create: { slug: lang.slug, name: lang.name, nativeName: lang.nativeName, flagEmoji: "🇰🇪", isActive: lang.isActive, sortOrder: lang.sortOrder },
+    });
+    let exCount = 0;
+    for (const unitData of units) {
+      const { lessons: lessonsData, ...unitFields } = unitData;
+      const unit = await prisma.unit.upsert({
+        where: { id: `${lang.slug}-unit-${unitFields.sortOrder}` },
+        update: { ...unitFields, languageId: language.id },
+        create: { id: `${lang.slug}-unit-${unitFields.sortOrder}`, ...unitFields, languageId: language.id },
+      });
+      for (const lessonData of lessonsData) {
+        const { exercises: exercisesData, ...lessonFields } = lessonData;
+        const lesson = await prisma.lesson.upsert({
+          where: { id: `${lang.slug}-u${unitFields.sortOrder}-l${lessonFields.sortOrder}` },
+          update: { ...lessonFields, unitId: unit.id },
+          create: { id: `${lang.slug}-u${unitFields.sortOrder}-l${lessonFields.sortOrder}`, ...lessonFields, unitId: unit.id },
+        });
+        for (const ex of exercisesData) {
+          const exId = `${lang.slug}-u${unitFields.sortOrder}-l${lessonFields.sortOrder}-e${ex.sortOrder}`;
+          const exTyped = { ...ex, type: ex.type as ExerciseType };
+          await prisma.exercise.upsert({
+            where: { id: exId },
+            update: { ...exTyped, lessonId: lesson.id },
+            create: { id: exId, ...exTyped, lessonId: lesson.id },
+          });
+          exCount++;
+        }
+      }
+    }
+    console.log(`✓ ${lang.name}: ${units.length} units, ${units.flatMap(u => u.lessons).length} lessons, ${exCount} exercises`);
+  }
+
+  await seedLanguage({ slug: "luo", name: "Luo", nativeName: "Dholuo", isActive: true, sortOrder: 2 }, LUO_UNITS);
+  await seedLanguage({ slug: "luhya", name: "Luhya", nativeName: "Luluhya", isActive: true, sortOrder: 3 }, LUHYA_UNITS);
+  await seedLanguage({ slug: "kamba", name: "Kamba", nativeName: "Kikamba", isActive: true, sortOrder: 4 }, KAMBA_UNITS);
+
   console.log("Seed complete!");
 }
 

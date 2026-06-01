@@ -10,7 +10,7 @@ export default async function ProfilePage() {
   const [user, userBadges, allBadges, enrollments, totalResults] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { name: true, email: true, xpTotal: true, currentStreak: true, longestStreak: true, createdAt: true },
+      select: { name: true, email: true, xpTotal: true, currentStreak: true, longestStreak: true, createdAt: true, emailOptOut: true },
     }),
     prisma.userBadge.findMany({
       where: { userId },
@@ -95,6 +95,32 @@ export default async function ProfilePage() {
             );
           })}
         </div>
+      </div>
+
+      {/* Email reminders toggle */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex items-center justify-between">
+        <div>
+          <div className="font-medium text-gray-900">Daily reminders</div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            {user.emailOptOut ? "Reminders are off" : "We'll nudge you if you miss a day"}
+          </div>
+        </div>
+        <form action={async () => {
+          "use server";
+          const { prisma: db } = await import("@/lib/prisma");
+          const { auth: getAuth } = await import("@/auth");
+          const s = await getAuth();
+          if (s?.user?.id) await db.user.update({ where: { id: s.user.id }, data: { emailOptOut: !user.emailOptOut } });
+          const { redirect } = await import("next/navigation");
+          redirect("/profile");
+        }}>
+          <button
+            type="submit"
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${user.emailOptOut ? "bg-gray-200" : "bg-emerald-500"}`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${user.emailOptOut ? "translate-x-1" : "translate-x-6"}`} />
+          </button>
+        </form>
       </div>
 
       {/* Sign out */}

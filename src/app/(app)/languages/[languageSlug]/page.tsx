@@ -37,9 +37,12 @@ export default async function LanguageUnitMapPage({
     })).map((r) => r.lessonId)
   );
 
-  const enrollment = await prisma.userLanguage.findUnique({
-    where: { userId_languageId: { userId, languageId: language.id } },
-  });
+  const [enrollment, storyCount] = await Promise.all([
+    prisma.userLanguage.findUnique({
+      where: { userId_languageId: { userId, languageId: language.id } },
+    }),
+    prisma.story.count({ where: { languageId: language.id, isPublished: true } }),
+  ]);
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
@@ -121,6 +124,25 @@ export default async function LanguageUnitMapPage({
             </div>
           );
         })}
+      </div>
+
+      {/* Stories section */}
+      <div className="mt-8 pt-6 border-t border-gray-100">
+        <Link
+          href={`/languages/${languageSlug}/stories`}
+          className="flex items-center justify-between bg-emerald-50 rounded-2xl border border-emerald-100 p-4 hover:bg-emerald-100 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📖</span>
+            <div>
+              <div className="font-semibold text-gray-900">Stories</div>
+              <div className="text-xs text-gray-500">
+                {storyCount > 0 ? `${storyCount} stor${storyCount === 1 ? "y" : "ies"} available` : "Coming soon"}
+              </div>
+            </div>
+          </div>
+          <span className="text-emerald-600 font-bold">→</span>
+        </Link>
       </div>
     </div>
   );
