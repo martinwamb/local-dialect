@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: "2mb" },
   },
+  outputFileTracingRoot: require("path").join(__dirname),
 };
 
 export default nextConfig;
