@@ -1,10 +1,10 @@
 const OLLAMA_BASE = "http://127.0.0.1:11434";
 
-export async function askQwen(prompt: string, model = "qwen2.5:7b"): Promise<string> {
+export async function askQwen(prompt: string, model = "qwen3:14b"): Promise<string> {
   const res = await fetch(`${OLLAMA_BASE}/api/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, prompt, stream: false }),
+    body: JSON.stringify({ model, prompt, stream: false, think: false }),
   });
   if (!res.ok) throw new Error(`Ollama error: ${res.status}`);
   const data = await res.json();

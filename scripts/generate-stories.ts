@@ -16,7 +16,7 @@ import fs from "fs";
 import path from "path";
 
 const DRY_RUN = process.argv.includes("--dry-run");
-const MODEL = "qwen2.5:14b";
+const MODEL = "qwen3:14b";
 const OLLAMA = "http://127.0.0.1:11434";
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://dialect.wambugumartin.com";
 
@@ -84,7 +84,7 @@ Make the story warm, culturally appropriate, and educational. Use authentic Kiku
   const res = await fetch(`${OLLAMA}/api/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: MODEL, prompt, stream: false }),
+    body: JSON.stringify({ model: MODEL, prompt, stream: false, think: false }),
   });
 
   if (!res.ok) throw new Error(`Ollama error: ${res.status}`);

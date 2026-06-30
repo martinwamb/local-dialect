@@ -18,7 +18,7 @@ import path from "path";
 const args = process.argv.slice(2);
 const language = args[args.indexOf("--language") + 1] ?? "kikuyu";
 const limit = Number(args[args.indexOf("--limit") + 1] ?? 50);
-const model = args[args.indexOf("--model") + 1] ?? "qwen2.5:7b";
+const model = args[args.indexOf("--model") + 1] ?? "qwen3:14b";
 
 const DATASETS: Record<string, { dataset: string; config: string; srcField: string; tgtField: string }> = {
   kikuyu: { dataset: "DigiGreen/KikuyuEnglish_translation", config: "default", srcField: "source", tgtField: "target" },
@@ -57,7 +57,7 @@ Output ONLY a valid JSON array with exactly 3 strings: ["wrong1","wrong2","wrong
     const res = await fetch("http://127.0.0.1:11434/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, prompt, stream: false }),
+      body: JSON.stringify({ model, prompt, stream: false, think: false }),
     });
     if (!res.ok) throw new Error(`Ollama ${res.status}`);
     const data = await res.json() as { response: string };
