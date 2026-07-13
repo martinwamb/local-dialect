@@ -41,3 +41,10 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# python (audio generation scripts)
+__pycache__/
+*.pyc
+
+# generated audio — large binaries, generated on the server, not committed
+/public/audio/

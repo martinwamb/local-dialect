@@ -42,5 +42,18 @@ module.exports = {
       watch: false,
       env: { NODE_ENV: "production" },
     },
+    // Runs near the end of the off-peak window, after the Ollama-dependent
+    // workers above — audio generation is CPU/local-model bound, not Ollama
+    // bound, so it doesn't compete with them for the LLM itself.
+    {
+      name: "audio-worker",
+      script: "node_modules/.bin/tsx",
+      args: "scripts/audio-worker.ts",
+      cwd: "/home/admin/apps/local-dialect",
+      cron_restart: "15 5 * * *",
+      autorestart: false,
+      watch: false,
+      env: { NODE_ENV: "production" },
+    },
   ],
 };

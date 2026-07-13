@@ -2,3 +2,6 @@ transformers>=4.40.0
 torch>=2.2.0
 pydub>=0.25.1
 soundfile>=0.12.1
+# Coqui TTS (YourTTS-Luo model) — the original coqui-ai/TTS project is unmaintained;
+# this is the community-maintained continuation that keeps the same `TTS.api` import path.
+coqui-tts>=0.24.0
