@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { STAGE_ORDER } from "@/lib/constants";
 
 export async function GET(
   _req: Request,
@@ -21,12 +22,15 @@ export async function GET(
     },
   });
 
-  const completedLessonIds = new Set(
-    (await prisma.lessonResult.findMany({
-      where: { userId: session.user.id },
-      select: { lessonId: true },
-    })).map((r) => r.lessonId)
-  );
+  const [completedLessonIds, userLanguage] = await Promise.all([
+    prisma.lessonResult
+      .findMany({ where: { userId: session.user.id }, select: { lessonId: true } })
+      .then((rows) => new Set(rows.map((r) => r.lessonId))),
+    prisma.userLanguage.findUnique({
+      where: { userId_languageId: { userId: session.user.id, languageId: language.id } },
+    }),
+  ]);
+  const unlockedStageOrder = STAGE_ORDER[userLanguage?.unlockedStage ?? "BEGINNER"];
 
   const unitsWithProgress = units.map((unit, ui) => {
     let prevCompleted = ui === 0;
@@ -34,15 +38,17 @@ export async function GET(
       const prevUnit = units[ui - 1];
       prevCompleted = prevUnit.lessons.every((l) => completedLessonIds.has(l.id));
     }
+    // A unit is reachable either by finishing the previous one in sequence, or
+    // by a placement quiz that unlocked its stage directly.
+    const unitAccessible = prevCompleted || STAGE_ORDER[unit.stage] <= unlockedStageOrder;
 
     const lessons = unit.lessons.map((lesson, li) => {
       const isCompleted = completedLessonIds.has(lesson.id);
-      const isLocked = !prevCompleted && li !== 0;
       const firstIncomplete = unit.lessons.findIndex((l) => !completedLessonIds.has(l.id));
       return {
         ...lesson,
         isCompleted,
-        isLocked: !prevCompleted && li > firstIncomplete,
+        isLocked: !unitAccessible && li > firstIncomplete,
         isCurrent: !isCompleted && li === (firstIncomplete === -1 ? 0 : firstIncomplete),
       };
     });

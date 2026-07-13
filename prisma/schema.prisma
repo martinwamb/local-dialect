@@ -113,11 +113,22 @@ model Unit {
   targetLessonCount Int @default(5)
   targetStoryCount  Int @default(2)
 
+  // Groups units into a learning stage so confident speakers can place into a
+  // later stage instead of starting at the very first unit.
+  stage Stage @default(BEGINNER)
+
   language Language @relation(fields: [languageId], references: [id])
   lessons  Lesson[]
   stories  Story[]
 
   @@map("units")
+}
+
+enum Stage {
+  BEGINNER
+  ELEMENTARY
+  INTERMEDIATE
+  ADVANCED
 }
 
 model Lesson {
@@ -129,6 +140,11 @@ model Lesson {
   xpReward    Int        @default(10)
   type        LessonType @default(STANDARD)
   source      String     @default("seed") // "seed" | "ai-generated"
+  // Teaching screens shown before the exercises, narrated and navigable
+  // back/forward — e.g. [{type: "introduction"|"explanation"|"example", text,
+  // narrationAudioUrl}]. Null/empty means the lesson jumps straight into
+  // exercises, as all lessons do today.
+  introContent Json?
   createdAt   DateTime   @default(now())
 
   unit          Unit           @relation(fields: [unitId], references: [id])
@@ -143,6 +159,7 @@ enum LessonType {
   REVIEW
   CHALLENGE
   STORY
+  QUIZ
 }
 
 model Exercise {
@@ -175,6 +192,10 @@ model UserLanguage {
   enrolledAt       DateTime @default(now())
   xpEarned         Int      @default(0)
   lessonsCompleted Int      @default(0)
+
+  // Raised above BEGINNER by a placement quiz — lets a confident speaker start
+  // partway through the curriculum instead of the very first unit.
+  unlockedStage Stage @default(BEGINNER)
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   language Language @relation(fields: [languageId], references: [id])

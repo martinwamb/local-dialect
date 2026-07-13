@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState } from "react";
 
 interface Props {
@@ -58,6 +59,15 @@ export default function LanguageEnrollCard({ language, isEnrolled }: Props) {
         <div className="text-sm text-gray-500">{language.nativeName}</div>
         {language.description && (
           <div className="text-xs text-gray-400 mt-1 truncate">{language.description}</div>
+        )}
+        {!isEnrolled && language.isActive && (
+          <Link
+            href={`/languages/${language.slug}/placement`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-xs text-emerald-600 hover:text-emerald-700 mt-1 inline-block"
+          >
+            Already know some? Take a placement quiz →
+          </Link>
         )}
       </div>
       {language.isActive && (
