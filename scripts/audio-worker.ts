@@ -23,8 +23,16 @@ const args = process.argv.slice(2);
 const maxArgIdx = args.indexOf("--max");
 const MAX_TOTAL_PER_RUN = Number(maxArgIdx >= 0 ? args[maxArgIdx + 1] : (process.env.AUDIO_GEN_MAX_PER_RUN ?? 20));
 const PUBLIC_AUDIO_DIR = path.resolve(process.env.AUDIO_DIR ?? "public/audio");
-const PYTHON_BIN = process.env.AUDIO_PYTHON_BIN ?? "python3";
 const publicRoot = path.resolve("public");
+
+// Each dialect model has its own Python venv (mirrors the `learn` project's
+// one-venv-per-tool convention) — coqui-tts (Luo) and transformers (Kikuyu)
+// have historically pulled in mutually incompatible dependency versions when
+// sharing one environment.
+function pythonBinFor(language: string): string {
+  if (language === "luo") return process.env.LUO_PYTHON_BIN ?? "python3";
+  return process.env.AUDIO_PYTHON_BIN ?? "python3";
+}
 
 interface BatchItem {
   id: string;
@@ -121,7 +129,7 @@ function runPythonBatch(
     const batchFile = path.join(os.tmpdir(), `audio-batch-${language}-${Date.now()}.json`);
     fs.writeFileSync(batchFile, JSON.stringify(items));
 
-    const proc = spawn(PYTHON_BIN, ["scripts/generate_audio.py", "--language", language, "--batch", batchFile]);
+    const proc = spawn(pythonBinFor(language), ["scripts/generate_audio.py", "--language", language, "--batch", batchFile]);
     let stdout = "";
     proc.stdout.on("data", (d) => (stdout += d.toString()));
     proc.stderr.on("data", (d) => process.stdout.write(`    [py] ${d}`));

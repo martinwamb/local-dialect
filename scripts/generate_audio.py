@@ -4,9 +4,24 @@ Generate MP3 pronunciation audio for a batch of (id, text) items in one language
 
 Dispatches to the right model per language:
   kikuyu -> BrianMwangi/African-Kikuyu-TTS (HuggingFace transformers pipeline)
-  luo    -> CLEAR-Global/YourTTS-Luo (Coqui TTS checkpoint)
+  luo    -> CLEAR-Global/YourTTS-Luo (Coqui TTS checkpoint) — NOT YET WORKING,
+            see status note below.
 Any other language currently has no known TTS model and is rejected up front —
 Kamba and Luhya stay text-only until one exists.
+
+STATUS (as of this writing): Luo fails to load with
+'NoneType' object has no attribute 'init_encoder' inside coqui-tts's VITS
+model init — this specific community checkpoint's config.json ships with
+several bugs (relative paths from the original training machine baked into
+model_args.d_vector_file/speakers_file that don't exist anywhere; a
+use_d_vector_file=true flag despite speakers.pth actually being a plain
+{"name": id} map, not real d-vector embeddings). Both of those are patched
+below, but the resulting single-speaker load path then hits a speaker-encoder
+init that expects an encoder this checkpoint doesn't ship. Needs further
+investigation into what encoder_path/encoder_config_path (or a different
+inference entry point than TTS.api.TTS) this specific checkpoint expects —
+not something to debug blind from the outside without deeper coqui-tts/VITS
+familiarity. Kikuyu is fully working and unaffected by any of this.
 
 Usage:
   python scripts/generate_audio.py --language kikuyu --batch /tmp/batch.json
@@ -20,11 +35,28 @@ Prerequisites on server:
   pip install -r scripts/requirements-audio.txt
   apt-get install ffmpeg  (usually already present)
 
-  # Luo only — download just the inference files (skip training logs/checkpoints,
-  # ~2GB of the repo is unneeded training artifacts):
-  huggingface-cli download CLEAR-Global/YourTTS-Luo \\
+  # Luo only — separate venv (coqui-tts's transformers pin conflicts with the
+  # Kikuyu venv's), download just the inference files (skip training
+  # logs/checkpoints, ~2GB of the repo is unneeded training artifacts), then
+  # patch the config bugs described in the STATUS note above:
+  python3 -m venv ~/local-dialect-luo-venv
+  ~/local-dialect-luo-venv/bin/pip install "coqui-tts[codec]" pydub
+  hf download CLEAR-Global/YourTTS-Luo \\
     best_model.pth config.json speakers.pth language_ids.json \\
     --local-dir /home/admin/tts-models/yourtts-luo
+  python3 -c "
+import json
+p = '/home/admin/tts-models/yourtts-luo/config.json'
+c = json.load(open(p))
+sp = '/home/admin/tts-models/yourtts-luo/speakers.pth'
+lp = '/home/admin/tts-models/yourtts-luo/language_ids.json'
+for scope in (c, c['model_args']):
+    scope['speakers_file'] = sp
+    scope['d_vector_file'] = [sp]
+    scope['use_d_vector_file'] = False
+c['model_args']['language_ids_file'] = lp
+json.dump(c, open(p, 'w'), indent=2)
+"
 """
 
 import argparse
@@ -83,7 +115,10 @@ def synthesize_luo(items: list[dict], results: list[dict]) -> None:
         )
 
     log(f"Loading YourTTS-Luo from {model_dir}...")
-    tts = TTS(model_path=str(model_path), config_path=str(config_path))
+    # config.json bakes in training-time relative paths for the speaker
+    # embeddings file that don't exist on this server — override explicitly.
+    speakers_path = Path(model_dir) / "speakers.pth"
+    tts = TTS(model_path=str(model_path), config_path=str(config_path), speakers_file_path=str(speakers_path))
     speaker = tts.speakers[0] if getattr(tts, "speakers", None) else None
     language = tts.languages[0] if getattr(tts, "languages", None) else "luo"
     log(f"Model loaded. speaker={speaker!r} language={language!r}")
