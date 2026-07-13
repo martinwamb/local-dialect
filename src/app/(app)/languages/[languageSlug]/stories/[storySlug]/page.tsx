@@ -31,6 +31,7 @@ export default async function StoryReaderPage({
     id: story.id, languageId: story.languageId, unitId: story.unitId,
     title: story.title, slug: story.slug, description: story.description,
     coverEmoji: story.coverEmoji, sortOrder: story.sortOrder, isPublished: story.isPublished,
+    backgroundAudioUrl: story.backgroundAudioUrl,
   };
 
   return (

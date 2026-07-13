@@ -303,6 +303,9 @@ model Story {
   coverEmoji  String?
   sortOrder   Int         @default(0)
   isPublished Boolean     @default(false)
+  // Short looping ambient bed (Freesound, Attribution/CC0-licensed) played
+  // quietly while reading — null means no background audio for this story.
+  backgroundAudioUrl String?
   createdAt   DateTime    @default(now())
 
   language Language    @relation(fields: [languageId], references: [id])

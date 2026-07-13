@@ -10,8 +10,20 @@
  */
 import { db } from "./lib/db";
 import { askQwen } from "../src/lib/ollama";
+import { searchPhoto } from "../src/lib/media/pexels";
+import { searchSound } from "../src/lib/media/freesound";
 import fs from "fs";
 import path from "path";
+
+// A calm, culturally-warm rotation for story background audio — rotated by
+// story title hash rather than searched per-topic, since Freesound's catalog
+// doesn't reliably map niche lesson topics to matching ambient music.
+const AMBIENT_QUERIES = ["soft kalimba loop", "gentle acoustic guitar ambient", "calm marimba loop"];
+
+function pickAmbientQuery(seed: string): string {
+  const hash = [...seed].reduce((h, c) => h + c.charCodeAt(0), 0);
+  return AMBIENT_QUERIES[hash % AMBIENT_QUERIES.length];
+}
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const args = process.argv.slice(2);
@@ -123,11 +135,16 @@ async function generateStoryForUnit(unit: {
     slug = `${slugify(story.title)}-${++suffix}`;
   }
 
+  // Best-effort — searchPhoto/searchSound return null without an API key or
+  // on a miss, which just means that page/story stays without media.
+  const pageImages = await Promise.all(story.pages.map((p) => searchPhoto(p.translatedText)));
+  const backgroundAudioUrl = await searchSound(pickAmbientQuery(story.title));
+
   if (DRY_RUN) {
     const outDir = path.join("src", "data", "seed", "generated");
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
     const outFile = path.join(outDir, `stories-${new Date().toISOString().split("T")[0]}-${slug}.json`);
-    fs.writeFileSync(outFile, JSON.stringify({ ...story, slug, unitId: unit.id }, null, 2));
+    fs.writeFileSync(outFile, JSON.stringify({ ...story, slug, unitId: unit.id, pageImages, backgroundAudioUrl }, null, 2));
     console.log(`    ✓ (dry-run) "${story.title}" → ${outFile}`);
     return true;
   }
@@ -142,12 +159,14 @@ async function generateStoryForUnit(unit: {
       coverEmoji: story.coverEmoji,
       sortOrder: unit._count.stories + 1,
       isPublished: true,
+      backgroundAudioUrl,
       pages: {
         create: story.pages.map((p, i) => ({
           pageNumber: i + 1,
           sourceText: p.sourceText,
           translatedText: p.translatedText,
           wordMap: p.wordMap,
+          imageUrl: pageImages[i],
         })),
       },
     },

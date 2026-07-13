@@ -19,5 +19,6 @@ export interface StoryRecord {
   coverEmoji: string | null;
   sortOrder: number;
   isPublished: boolean;
+  backgroundAudioUrl: string | null;
   pages?: StoryPageRecord[];
 }

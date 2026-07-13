@@ -19,7 +19,7 @@ async function callOllama(prompt: string, model: string): Promise<string> {
   }
 }
 
-export async function askQwen(prompt: string, model = "qwen3:14b"): Promise<string> {
+export async function askQwen(prompt: string, model = process.env.OLLAMA_MODEL ?? "qwen3:14b"): Promise<string> {
   try {
     return await callOllama(prompt, model);
   } catch (err) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { StoryRecord, StoryPageRecord } from "@/types/story";
 import StoryPageView from "./StoryPageView";
@@ -14,13 +14,26 @@ interface Props {
 export default function StoryReader({ story, pages, languageSlug }: Props) {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [muted, setMuted] = useState(false);
+  const bgAudioRef = useRef<HTMLAudioElement | null>(null);
   const isLast = currentIndex === pages.length - 1;
   const page = pages[currentIndex];
+
+  useEffect(() => {
+    if (!story.backgroundAudioUrl) return;
+    const audio = bgAudioRef.current;
+    if (!audio) return;
+    audio.volume = 0.15;
+    if (!muted) audio.play().catch(() => {});
+    else audio.pause();
+  }, [muted, story.backgroundAudioUrl]);
 
   if (!page) return null;
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
+      {story.backgroundAudioUrl && <audio ref={bgAudioRef} src={story.backgroundAudioUrl} loop />}
+
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
         <button
@@ -30,7 +43,18 @@ export default function StoryReader({ story, pages, languageSlug }: Props) {
           ← Stories
         </button>
         <span className="font-semibold text-gray-900 text-sm truncate mx-4">{story.title}</span>
-        <span className="text-xs text-gray-400">{currentIndex + 1}/{pages.length}</span>
+        <div className="flex items-center gap-3 shrink-0">
+          {story.backgroundAudioUrl && (
+            <button
+              onClick={() => setMuted((m) => !m)}
+              className="text-gray-400 hover:text-gray-700 transition-colors"
+              aria-label={muted ? "Unmute background music" : "Mute background music"}
+            >
+              {muted ? "🔇" : "🔊"}
+            </button>
+          )}
+          <span className="text-xs text-gray-400">{currentIndex + 1}/{pages.length}</span>
+        </div>
       </div>
 
       {/* Progress bar */}
