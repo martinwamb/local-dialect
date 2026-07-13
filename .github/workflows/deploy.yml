@@ -34,11 +34,14 @@ jobs:
             echo "--- Generating Prisma client ---"
             npx prisma generate
 
+            echo "--- Running migrations ---"
+            npx prisma migrate deploy
+
             echo "--- Building Next.js app ---"
             npm run build
 
-            echo "--- Restarting PM2 process ---"
-            pm2 restart local-dialect || pm2 start npm --name local-dialect -- start
+            echo "--- Restarting PM2 processes ---"
+            pm2 startOrReload ecosystem.config.js --update-env
             pm2 save
 
             echo "=== Deploy complete ==="
