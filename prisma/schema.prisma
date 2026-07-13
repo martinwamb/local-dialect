@@ -108,6 +108,11 @@ model Unit {
   color       String?
   createdAt   DateTime @default(now())
 
+  // How many lessons/stories the content workers should keep this unit stocked
+  // with — lets generation target real gaps instead of a hardcoded topic list.
+  targetLessonCount Int @default(5)
+  targetStoryCount  Int @default(2)
+
   language Language @relation(fields: [languageId], references: [id])
   lessons  Lesson[]
   stories  Story[]
@@ -123,6 +128,7 @@ model Lesson {
   sortOrder   Int
   xpReward    Int        @default(10)
   type        LessonType @default(STANDARD)
+  source      String     @default("seed") // "seed" | "ai-generated"
   createdAt   DateTime   @default(now())
 
   unit          Unit           @relation(fields: [unitId], references: [id])
@@ -248,6 +254,20 @@ model EmailLog {
 
   @@index([userId, type, sentAt])
   @@map("email_logs")
+}
+
+// ─── BACKGROUND WORKERS ────────────────────────────────────────────────────────
+
+model GeneratorLog {
+  id             String   @id @default(cuid())
+  workerType     String // "content" | "stories" | "audio"
+  ranAt          DateTime @default(now())
+  unitsProcessed Int      @default(0)
+  itemsCreated   Int      @default(0)
+  errors         String[] @default([])
+  durationMs     Int      @default(0)
+
+  @@map("generator_logs")
 }
 
 // ─── STORIES ─────────────────────────────────────────────────────────────────

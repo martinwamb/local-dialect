@@ -1,153 +1,207 @@
 /**
- * Generate initial Kikuyu stories using Qwen2.5:14b via Ollama.
- * Usage: npx tsx scripts/generate-stories.ts [--dry-run]
+ * Generates stories for any unit, across any active language, that's below its
+ * targetStoryCount — pulling vocabulary already taught in that unit's lessons so
+ * new stories stay thematically grounded. Writes directly to the DB via Prisma
+ * (no HTTP round-trip through the session-authed admin API).
  *
- * Requires: Ollama running at 127.0.0.1:11434 with qwen2.5:14b loaded.
- * Posts stories to POST /api/admin/stories (requires NEXTAUTH_URL + admin session).
+ * Usage: npx tsx scripts/generate-stories.ts [--dry-run] [--max N]
  *
- * Alternatively, writes JSON to src/data/seed/generated/stories-{date}.json
- * if --dry-run is passed.
+ * Requires: Ollama running at 127.0.0.1:11434 with qwen3:14b loaded.
  */
-import dotenv from "dotenv";
-dotenv.config({ path: ".env" });
-dotenv.config({ path: ".env.local", override: true });
-
+import { db } from "./lib/db";
+import { askQwen } from "../src/lib/ollama";
 import fs from "fs";
 import path from "path";
 
 const DRY_RUN = process.argv.includes("--dry-run");
-const MODEL = "qwen3:14b";
-const OLLAMA = "http://127.0.0.1:11434";
-const APP_URL = process.env.NEXTAUTH_URL ?? "https://dialect.wambugumartin.com";
+const args = process.argv.slice(2);
+const maxArgIdx = args.indexOf("--max");
+const MAX_TOTAL_PER_RUN = Number(
+  maxArgIdx >= 0 ? args[maxArgIdx + 1] : (process.env.STORY_GEN_MAX_TOTAL_PER_RUN ?? 4)
+);
 
-const STORY_TOPICS = [
-  {
-    slug: "greeting-grandmother",
-    title: "Greeting Grandmother",
-    coverEmoji: "👵",
-    description: "A child visits their grandmother and practises greetings",
-    languageSlug: "kikuyu",
-    unitSortOrder: 1,
-    topic: "A young child visiting their grandmother and exchanging greetings",
-    vocabulary: ["Wĩ mwega?", "Nĩ mwega", "Māīthe", "Nyina", "Thiĩ wega", "Ĩĩ", "mwana"],
-  },
-  {
-    slug: "counting-at-market",
-    title: "At the Market",
-    coverEmoji: "🛒",
-    description: "A child helps count items at the local market",
-    languageSlug: "kikuyu",
-    unitSortOrder: 2,
-    topic: "A child helping their parent count fruits and vegetables at the market",
-    vocabulary: ["ĩmwe", "igĩrĩ", "ĩtatũ", "ĩnya", "ĩtano", "mwana", "māīthe"],
-  },
-  {
-    slug: "my-family",
-    title: "My Family",
-    coverEmoji: "👨‍👩‍👧",
-    description: "A child introduces their family members",
-    languageSlug: "kikuyu",
-    unitSortOrder: 3,
-    topic: "A child introducing their family — mother, father, siblings",
-    vocabulary: ["māīthe", "nyina", "mwana", "kūrū", "Nĩ mwega", "Ndĩ na māīthe na nyina"],
-  },
-];
+interface GeneratedStory {
+  title: string;
+  coverEmoji: string;
+  description: string;
+  pages: { sourceText: string; translatedText: string; wordMap: Record<string, string> }[];
+}
 
-async function generateStoryPages(topic: typeof STORY_TOPICS[0]): Promise<{
-  sourceText: string;
-  translatedText: string;
-  wordMap: Record<string, string>;
-}[]> {
-  const vocabList = topic.vocabulary.join(", ");
-  const prompt = `You are a Kikuyu language teacher creating educational content for beginners.
+function slugify(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
 
-Write a simple children's story in Kikuyu (Gĩkũyũ language) about: ${topic.topic}
+function buildPrompt(languageName: string, unitTitle: string, vocab: string[], existingTitles: string[]): string {
+  const vocabList = vocab.length ? vocab.slice(0, 12).join(", ") : "simple everyday words";
+  return `You are a ${languageName} language teacher creating educational content for beginners.
+
+Write a short children's story in ${languageName} themed around: "${unitTitle}"
 
 Requirements:
 - Exactly 5 short sentences (one per story page)
-- Use simple vocabulary appropriate for beginners, including these words where natural: ${vocabList}
-- Each sentence should be short (5-12 words in Kikuyu)
+- Use simple vocabulary appropriate for beginners, naturally including some of these already-taught words where possible: ${vocabList}
+- Each sentence should be short (5-12 words)
 - Include a word-by-word vocabulary map for each sentence
+- Give the story a short title (in English) and one cover emoji
+- Do NOT reuse any of these existing titles: ${existingTitles.length ? existingTitles.join(", ") : "(none yet)"}
 
 Return ONLY valid JSON in this exact format (no other text):
-[
-  {
-    "sourceText": "Kikuyu sentence here",
-    "translatedText": "English translation here",
-    "wordMap": {"kikuyu_word": "english_meaning", "another_word": "meaning"}
-  }
-]
-
-Make the story warm, culturally appropriate, and educational. Use authentic Kikuyu vocabulary.`;
-
-  console.log(`  Calling ${MODEL}...`);
-  const res = await fetch(`${OLLAMA}/api/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: MODEL, prompt, stream: false, think: false }),
-  });
-
-  if (!res.ok) throw new Error(`Ollama error: ${res.status}`);
-  const data = await res.json() as { response: string };
-
-  const jsonMatch = data.response.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error(`Could not parse JSON from response: ${data.response.slice(0, 200)}`);
-
-  return JSON.parse(jsonMatch[0]);
+{
+  "title": "Story title in English",
+  "coverEmoji": "📖",
+  "description": "One sentence description in English",
+  "pages": [
+    { "sourceText": "${languageName} sentence here", "translatedText": "English translation here", "wordMap": {"word": "meaning"} }
+  ]
 }
 
-async function main() {
-  const allStories: object[] = [];
+Make the story warm, culturally appropriate for Kenya, and educational. Use authentic ${languageName} vocabulary.`;
+}
 
-  for (const topic of STORY_TOPICS) {
-    console.log(`\nGenerating: "${topic.title}"...`);
+function extractJson(raw: string): GeneratedStory | null {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end === -1) return null;
+  try {
+    return JSON.parse(raw.slice(start, end + 1)) as GeneratedStory;
+  } catch {
+    return null;
+  }
+}
+
+async function vocabForUnit(unitId: string): Promise<string[]> {
+  const exercises = await db.exercise.findMany({
+    where: { lesson: { unitId } },
+    select: { data: true },
+    take: 30,
+  });
+  const words = new Set<string>();
+  for (const ex of exercises) {
+    const prompt = (ex.data as Record<string, unknown>)?.prompt;
+    if (typeof prompt === "string") words.add(prompt);
+  }
+  return [...words];
+}
+
+async function generateStoryForUnit(unit: {
+  id: string;
+  sortOrder: number;
+  title: string;
+  language: { id: string; name: string };
+  _count: { stories: number };
+}): Promise<boolean> {
+  const existing = await db.story.findMany({ where: { languageId: unit.language.id }, select: { title: true } });
+  const existingTitles = existing.map((s) => s.title);
+  const vocab = await vocabForUnit(unit.id);
+
+  const prompt = buildPrompt(unit.language.name, unit.title, vocab, existingTitles);
+  let story: GeneratedStory | null = null;
+  try {
+    const raw = await askQwen(prompt);
+    story = extractJson(raw);
+    if (!story) {
+      const raw2 = await askQwen(prompt + "\n\nRemember: respond with ONLY the JSON object, no other text.");
+      story = extractJson(raw2);
+    }
+  } catch (err) {
+    console.error(`    ❌ Ollama error: ${err}`);
+    return false;
+  }
+
+  if (!story || !story.title || !story.pages?.length) {
+    console.warn(`    ⚠️  Malformed story response, skipping`);
+    return false;
+  }
+  if (existingTitles.some((t) => t.toLowerCase() === story!.title.toLowerCase())) {
+    console.warn(`    ⚠️  Duplicate title "${story.title}", skipping`);
+    return false;
+  }
+
+  let slug = slugify(story.title);
+  let suffix = 1;
+  while (await db.story.findUnique({ where: { slug } })) {
+    slug = `${slugify(story.title)}-${++suffix}`;
+  }
+
+  if (DRY_RUN) {
+    const outDir = path.join("src", "data", "seed", "generated");
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    const outFile = path.join(outDir, `stories-${new Date().toISOString().split("T")[0]}-${slug}.json`);
+    fs.writeFileSync(outFile, JSON.stringify({ ...story, slug, unitId: unit.id }, null, 2));
+    console.log(`    ✓ (dry-run) "${story.title}" → ${outFile}`);
+    return true;
+  }
+
+  await db.story.create({
+    data: {
+      languageId: unit.language.id,
+      unitId: unit.id,
+      title: story.title,
+      slug,
+      description: story.description,
+      coverEmoji: story.coverEmoji,
+      sortOrder: unit._count.stories + 1,
+      isPublished: true,
+      pages: {
+        create: story.pages.map((p, i) => ({
+          pageNumber: i + 1,
+          sourceText: p.sourceText,
+          translatedText: p.translatedText,
+          wordMap: p.wordMap,
+        })),
+      },
+    },
+  });
+
+  console.log(`    ✓ "${story.title}" (${story.pages.length} pages)`);
+  return true;
+}
+
+async function run() {
+  const start = Date.now();
+  console.log(`\n📖 Story Generator started at ${new Date().toISOString()}${DRY_RUN ? " (dry-run)" : ""}`);
+
+  const units = await db.unit.findMany({
+    where: { language: { isActive: true } },
+    include: { _count: { select: { stories: true } }, language: true },
+    orderBy: [{ language: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+  });
+
+  const underStocked = units.filter((u) => u._count.stories < u.targetStoryCount);
+  console.log(`Found ${underStocked.length} units below target story count`);
+
+  let created = 0;
+  const errors: string[] = [];
+
+  for (const unit of underStocked) {
+    if (created >= MAX_TOTAL_PER_RUN) {
+      console.log(`  ⏸️  Reached max per run (${MAX_TOTAL_PER_RUN}) — remaining units continue next run`);
+      break;
+    }
+    console.log(`\n  📚 Unit: "${unit.title}" [${unit.language.name}]`);
     try {
-      const pages = await generateStoryPages(topic);
-      console.log(`  ✓ ${pages.length} pages generated`);
-
-      const storyData = {
-        title: topic.title,
-        slug: topic.slug,
-        coverEmoji: topic.coverEmoji,
-        description: topic.description,
-        languageSlug: topic.languageSlug,
-        unitSortOrder: topic.unitSortOrder,
-        pages,
-      };
-
-      allStories.push(storyData);
-
-      if (!DRY_RUN) {
-        console.log(`  Posting to ${APP_URL}/api/admin/stories...`);
-        const postRes = await fetch(`${APP_URL}/api/admin/stories`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-bypass": process.env.CRON_SECRET ?? "",
-          },
-          body: JSON.stringify(storyData),
-        });
-        if (postRes.ok) {
-          console.log(`  ✓ Story created`);
-        } else {
-          console.error(`  ✗ Failed: ${postRes.status} ${await postRes.text()}`);
-        }
-      }
+      const ok = await generateStoryForUnit(unit);
+      if (ok) created++;
     } catch (err) {
-      console.error(`  ✗ Error: ${err}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`  ❌ Unit "${unit.title}": ${msg}`);
+      errors.push(`${unit.title}: ${msg}`);
     }
   }
 
-  // Always write to file for review
-  const outDir = path.join("src", "data", "seed", "generated");
-  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
-  const outFile = path.join(outDir, `stories-${new Date().toISOString().split("T")[0]}.json`);
-  fs.writeFileSync(outFile, JSON.stringify(allStories, null, 2));
-  console.log(`\n✓ Stories written to ${outFile}`);
-
-  if (DRY_RUN) {
-    console.log("Dry run — stories not posted to API. Review the file then run without --dry-run.");
+  const durationMs = Date.now() - start;
+  if (!DRY_RUN) {
+    await db.generatorLog.create({
+      data: { workerType: "stories", unitsProcessed: underStocked.length, itemsCreated: created, errors, durationMs },
+    });
   }
+
+  console.log(`\n✅ Story Generator done — ${created} new stories, ${(durationMs / 1000).toFixed(1)}s`);
+  await db.$disconnect();
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+run().catch(async (err) => {
+  console.error("Story Generator fatal error:", err);
+  await db.$disconnect();
+  process.exit(1);
+});
