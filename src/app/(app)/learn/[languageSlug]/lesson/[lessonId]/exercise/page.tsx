@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import ExerciseFlow from "@/components/exercises/ExerciseFlow";
+import ExerciseFlow, { IntroScreen } from "@/components/exercises/ExerciseFlow";
 import { ExerciseRecord } from "@/types/exercise";
 
 function shuffle<T>(arr: T[]): T[] {
@@ -32,10 +32,12 @@ export default async function ExercisePage({
   if (!lesson || lesson.unit.language.slug !== languageSlug) notFound();
 
   const exercises = shuffle(lesson.exercises) as unknown as ExerciseRecord[];
+  const introContent = lesson.introContent as unknown as IntroScreen[] | undefined;
 
   return (
     <ExerciseFlow
       exercises={exercises}
+      introContent={introContent ?? undefined}
       lesson={{ id: lesson.id, title: lesson.title, xpReward: lesson.xpReward }}
       languageSlug={languageSlug}
     />

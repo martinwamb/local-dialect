@@ -108,11 +108,27 @@ model Unit {
   color       String?
   createdAt   DateTime @default(now())
 
+  // How many lessons/stories the content workers should keep this unit stocked
+  // with — lets generation target real gaps instead of a hardcoded topic list.
+  targetLessonCount Int @default(5)
+  targetStoryCount  Int @default(2)
+
+  // Groups units into a learning stage so confident speakers can place into a
+  // later stage instead of starting at the very first unit.
+  stage Stage @default(BEGINNER)
+
   language Language @relation(fields: [languageId], references: [id])
   lessons  Lesson[]
   stories  Story[]
 
   @@map("units")
+}
+
+enum Stage {
+  BEGINNER
+  ELEMENTARY
+  INTERMEDIATE
+  ADVANCED
 }
 
 model Lesson {
@@ -123,6 +139,12 @@ model Lesson {
   sortOrder   Int
   xpReward    Int        @default(10)
   type        LessonType @default(STANDARD)
+  source      String     @default("seed") // "seed" | "ai-generated"
+  // Teaching screens shown before the exercises, narrated and navigable
+  // back/forward — e.g. [{type: "introduction"|"explanation"|"example", text,
+  // narrationAudioUrl}]. Null/empty means the lesson jumps straight into
+  // exercises, as all lessons do today.
+  introContent Json?
   createdAt   DateTime   @default(now())
 
   unit          Unit           @relation(fields: [unitId], references: [id])
@@ -137,6 +159,7 @@ enum LessonType {
   REVIEW
   CHALLENGE
   STORY
+  QUIZ
 }
 
 model Exercise {
@@ -169,6 +192,10 @@ model UserLanguage {
   enrolledAt       DateTime @default(now())
   xpEarned         Int      @default(0)
   lessonsCompleted Int      @default(0)
+
+  // Raised above BEGINNER by a placement quiz — lets a confident speaker start
+  // partway through the curriculum instead of the very first unit.
+  unlockedStage Stage @default(BEGINNER)
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   language Language @relation(fields: [languageId], references: [id])
@@ -250,6 +277,20 @@ model EmailLog {
   @@map("email_logs")
 }
 
+// ─── BACKGROUND WORKERS ────────────────────────────────────────────────────────
+
+model GeneratorLog {
+  id             String   @id @default(cuid())
+  workerType     String // "content" | "stories" | "audio"
+  ranAt          DateTime @default(now())
+  unitsProcessed Int      @default(0)
+  itemsCreated   Int      @default(0)
+  errors         String[] @default([])
+  durationMs     Int      @default(0)
+
+  @@map("generator_logs")
+}
+
 // ─── STORIES ─────────────────────────────────────────────────────────────────
 
 model Story {
@@ -262,6 +303,9 @@ model Story {
   coverEmoji  String?
   sortOrder   Int         @default(0)
   isPublished Boolean     @default(false)
+  // Short looping ambient bed (Freesound, Attribution/CC0-licensed) played
+  // quietly while reading — null means no background audio for this story.
+  backgroundAudioUrl String?
   createdAt   DateTime    @default(now())
 
   language Language    @relation(fields: [languageId], references: [id])

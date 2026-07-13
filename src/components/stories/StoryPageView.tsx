@@ -24,9 +24,12 @@ export default function StoryPageView({ page, pageNumber, totalPages }: Props) {
       </div>
 
       {page.imageUrl && (
-        <div className="w-full aspect-video bg-emerald-50 rounded-2xl flex items-center justify-center text-6xl">
-          🌳
-        </div>
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={page.imageUrl}
+          alt=""
+          className="w-full aspect-video object-cover bg-emerald-50 rounded-2xl"
+        />
       )}
 
       {/* Kikuyu text with clickable words */}

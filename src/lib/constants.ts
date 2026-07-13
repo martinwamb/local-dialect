@@ -11,6 +11,11 @@ export const LEVEL_THRESHOLDS = [0, 50, 150, 300, 500, 800, 1200, 1800, 2600, 36
 
 export const DAILY_GOAL_XP = 20;
 
+// Ordered lowest-to-highest so a unit/placement stage can be compared with <=.
+export const STAGE_ORDER = { BEGINNER: 0, ELEMENTARY: 1, INTERMEDIATE: 2, ADVANCED: 3 } as const;
+export const STAGES = Object.keys(STAGE_ORDER) as (keyof typeof STAGE_ORDER)[];
+export const PLACEMENT_PASS_THRESHOLD = 0.7;
+
 export function getLevel(xp: number): number {
   let level = 1;
   for (let i = 0; i < LEVEL_THRESHOLDS.length; i++) {
